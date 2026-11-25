@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Chief of Staff</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #68707c;
+    --line: #e3e6ea; --accent: #1f4fd1; --accent-text: #ffffff;
+    --me: #1f4fd1; --me-text: #ffffff; --bot: #ffffff; --warn: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --panel: #191d23; --text: #e7eaee; --muted: #98a1ad;
+      --line: #2a3039; --accent: #6b8cff; --accent-text: #0b0e12;
+      --me: #3557d6; --me-text: #ffffff; --bot: #1f242b; --warn: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .sub { font-size: 13px; color: var(--muted); }
+  header button { margin-left: 8px; }
+  button {
+    font: inherit; font-size: 14px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--text); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  main { flex: 1; overflow-y: auto; padding: 16px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .msg { display: flex; margin: 10px 0; }
+  .msg.user { justify-content: flex-end; }
+  .bubble {
+    max-width: 85%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word;
+    background: var(--bot); border: 1px solid var(--line);
+  }
+  .msg.user .bubble { background: var(--me); color: var(--me-text); border-color: var(--me); }
+  .bubble code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+  .empty { color: var(--muted); text-align: center; margin-top: 18vh; }
+  .empty .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 14px; }
+  form.composer {
+    border-top: 1px solid var(--line); background: var(--panel); padding: 12px 16px;
+  }
+  form.composer .wrap { display: flex; gap: 8px; align-items: flex-end; }
+  textarea {
+    flex: 1; resize: none; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; max-height: 40vh;
+  }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #login {
+    position: fixed; inset: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  #login form {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 24px; width: 100%; max-width: 360px;
+  }
+  #login h2 { margin: 0 0 6px; font-size: 20px; }
+  #login p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+  #login input {
+    width: 100%; font: inherit; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+  }
+  #login button { width: 100%; padding: 10px; }
+  .err { color: var(--warn); font-size: 14px; min-height: 20px; margin-top: 8px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div id="login">
+  <form id="loginForm">
+    <h2>Chief of Staff</h2>
+    <p>Private. Enter your password to continue.</p>
+    <input id="pw" type="password" autocomplete="current-password" placeholder="Password" required>
+    <button class="primary" type="submit">Sign in</button>
+    <div class="err" id="loginErr"></div>
+  </form>
+</div>
+
+<header>
+  <div>
+    <h1>Chief of Staff</h1>
+    <div class="sub">Reminds, warns and drafts. Never sends or books without your yes.</div>
+  </div>
+  <div>
+    <button id="newChat" type="button">New chat</button>
+    <button id="signOut" type="button">Sign out</button>
+  </div>
+</header>
+
+<main id="log"><div class="wrap" id="msgs"></div></main>
+
+<form class="composer" id="composer">
+  <div class="wrap">
+    <textarea id="input" rows="1" placeholder="Message your chief of staff…"></textarea>
+    <button class="primary" id="send" type="submit">Send</button>
+  </div>
+</form>
+
+<script>
+(() => {
+  const PW_KEY = "cos_pw", HIST_KEY = "cos_history";
+  const store = {
+    get(k, s) { try { return s.getItem(k); } catch { return null; } },
+    set(k, v, s) { try { s.setItem(k, v); } catch {} },
+    del(k, s) { try { s.removeItem(k); } catch {} },
+  };
+  let password = store.get(PW_KEY, sessionStorage);
+  let history = [];
+  try { history = JSON.parse(store.get(HIST_KEY, localStorage) || "[]"); } catch { history = []; }
+  let busy = false;
+
+  const $ = (id) => document.getElementById(id);
+  const msgsEl = $("msgs"), logEl = $("log"), input = $("input"), sendBtn = $("send");
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+  function render(text) {
+    return escapeHtml(text)
+      .replace(/`([^`\n]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  }
+  function save() { store.set(HIST_KEY, JSON.stringify(history.slice(-60)), localStorage); }
+
+  function bubble(role, text) {
+    const row = document.createElement("div");
+    row.className = "msg " + role;
+    const b = document.createElement("div");
+    b.className = "bubble";
+    b.innerHTML = render(text);
+    row.appendChild(b);
+    msgsEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+    return b;
+  }
+
+  function showEmpty() {
+    msgsEl.innerHTML = "";
+    if (history.length) { history.forEach((m) => bubble(m.role, m.content)); return; }
+    const d = document.createElement("div");
+    d.className = "empty";
+    d.innerHTML = "<div>What do you need today?</div><div class='chips'></div>";
+    const chips = d.querySelector(".chips");
+    ["Plan my day", "Draft a follow-up email to a prospect", "Prepare me for a client meeting"].forEach((t) => {
+      const c = document.createElement("button");
+      c.type = "button"; c.textContent = t;
+      c.onclick = () => { input.value = t; send(); };
+      chips.appendChild(c);
+    });
+    msgsEl.appendChild(d);
+  }
+
+  async function login(pw) {
+    const r = await fetch("/api/login", { method: "POST", headers: { "x-chat-password": pw } });
+    if (r.ok) return null;
+    const j = await r.json().catch(() => ({}));
+    return j.error || "Sign-in failed (" + r.status + ").";
+  }
+
+  function lock(msg) {
+    password = null; store.del(PW_KEY, sessionStorage);
+    $("login").hidden = false; $("loginErr").textContent = msg || "";
+    $("pw").focus();
+  }
+
+  $("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pw = $("pw").value;
+    $("loginErr").textContent = "";
+    const err = await login(pw).catch(() => "Can't reach the server.");
+    if (err) { $("loginErr").textContent = err; return; }
+    password = pw; store.set(PW_KEY, pw, sessionStorage);
+    $("pw").value = ""; $("login").hidden = true; input.focus();
+  });
+
+  $("signOut").onclick = () => lock();
+  $("newChat").onclick = () => { if (busy) return; history = []; save(); showEmpty(); input.focus(); };
+
+  input.addEventListener("input", () => { input.style.height = "auto"; input.style.height = input.scrollHeight + "px"; });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+  });
+  $("composer").addEventListener("submit", (e) => { e.preventDefault(); send(); });
+
+  async function send() {
+    const text = input.value.trim();
+    if (!text || busy) return;
+    if (!history.length) msgsEl.innerHTML = "";
+    busy = true; sendBtn.disabled = true;
+    input.value = ""; input.style.height = "auto";
+    history.push({ role: "user", content: text }); save();
+    bubble("user", text);
+    const b = bubble("assistant", "…");
+    let out = "";
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-chat-password": password || "" },
+        body: JSON.stringify({ messages: history }),
+      });
+      if (r.status === 401) { history.pop(); save(); b.parentElement.remove(); lock("Please sign in again."); input.value = text; return; }
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || ("Error " + r.status));
+      }
+      const reader = r.body.getReader(), dec = new TextDecoder();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        out += dec.decode(value, { stream: true });
+        b.innerHTML = render(out);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      if (!out.trim()) out = "(No answer. Try again.)";
+      b.innerHTML = render(out);
+      history.push({ role: "assistant", content: out }); save();
+    } catch (err) {
+      b.innerHTML = "<span style='color:var(--warn)'>" + escapeHtml(err.message || "Something went wrong.") + "</span>";
+      history.pop(); save();
+      input.value = text;
+    } finally {
+      busy = false; sendBtn.disabled = false; input.focus();
+    }
+  }
+
+  showEmpty();
+  if (password) { $("login").hidden = true; } else { lock(); }
+})();
+</script>
+</body>
+</html>
