@@ -1,0 +1,14 @@
+{
+  "name": "forti-chief-of-staff",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-rulebook.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.14.0"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.1.2"
+  }
+}
